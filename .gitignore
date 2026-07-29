@@ -1,0 +1,23 @@
+# Renamed exports staged for GCS upload (customer feedback data)
+medallia_upload/
+
+# Raw Medallia CSV exports — contain customer PII, never commit
+*.csv
+
+# Playwright browser profile — holds SSO session cookies/tokens
+.medallia_playwright_profile/
+
+# Diagnostic DOM dumps (may include account/user info)
+inspect_*.json
+
+# Portal screenshots — contain customer comments and staff names
+BWM.png
+EDM.png
+EDRS.png
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
