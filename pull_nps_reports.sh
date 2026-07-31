@@ -30,7 +30,7 @@
 #
 # Usage:
 #   ./pull_nps_reports.sh [-d DOWNLOAD_DIR] [-w WORK_DIR] [-b BRANDS] [-f FILE]
-#                         [-D] [-H] [-p PROFILE_DIR] [-n]
+#                         [-D] [-H] [-p PROFILE_DIR] [-n] [-S]
 #
 #   -d DOWNLOAD_DIR  Directory holding the raw Medallia downloads (default: ~/Downloads)
 #   -w WORK_DIR      Directory to place renamed files      (default: ./medallia_upload)
@@ -40,6 +40,7 @@
 #   -H               Run the download browser headless (breaks first-time login)
 #   -p PROFILE_DIR   Persistent browser profile dir (default: ~/.medallia_playwright_profile)
 #   -n               Dry run: show actions without downloading/renaming/uploading
+#   -S               Skip CSV header/column validation before upload
 #
 # Downloading (-D) drives a real Chromium browser via medallia_download.py.
 # On the FIRST run a window opens and you log in through SSO (incl. MFA) once;
@@ -68,6 +69,7 @@ SRC_FILE=""
 DRY_RUN=0
 DOWNLOAD=0
 HEADLESS=0
+CHECK_HEADERS=1
 PROFILE_DIR="${HOME}/.medallia_playwright_profile"
 # Prefer python3.11 (where Playwright is installed) unless PY_BIN is overridden.
 if [[ -z "${PY_BIN:-}" ]]; then
@@ -79,6 +81,7 @@ if [[ -z "${PY_BIN:-}" ]]; then
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DOWNLOADER="${SCRIPT_DIR}/medallia_download.py"
+HEADER_CHECKER="${SCRIPT_DIR}/check_headers.py"
 
 # Full Medallia report URLs (reconstructed from the calendar redirect links).
 BWM_URL='https://woolworthsgroup.medallia.com.au/sso/woolworthsgroup/applications/ex_WEB-9/pages/4035?roleId=28862&f.benchmark=all&f.timeperiod=508&f.reporting-date=k_bp_timezone_response_time&fi.benchmark=all&fi.pfe_woolworthsgroup_survey_program_alt=681_42&fi.pfe_woolworthsgroup_store_no_unit=1636780&fi.timeperiod=341&fi.reporting-date=k_bp_timezone_response_time'
@@ -130,10 +133,30 @@ newest_match() {
     [[ -n "$newest" ]] && printf '%s' "$newest"
 }
 
+# Validate that a CSV's header row matches the expected columns for a brand.
+# Returns 0 if the columns are as expected (or validation is skipped/unavailable),
+# non-zero if expected columns are missing. Extra/new columns are a warning only.
+check_headers() {
+    local brand="$1" src="$2"
+
+    [[ "$CHECK_HEADERS" -eq 1 ]] || return 0
+
+    if [[ ! -f "$HEADER_CHECKER" ]]; then
+        warn "$brand: header checker not found ($HEADER_CHECKER); skipping validation."
+        return 0
+    fi
+    if ! command -v "$PY_BIN" >/dev/null 2>&1; then
+        warn "$brand: $PY_BIN not found; skipping header validation."
+        return 0
+    fi
+
+    "$PY_BIN" "$HEADER_CHECKER" --brand "$brand" --file "$src"
+}
+
 # ----------------------------------------------------------------------------
 # Argument parsing
 # ----------------------------------------------------------------------------
-while getopts ':d:w:b:f:p:DHnh' opt; do
+while getopts ':d:w:b:f:p:DHnSh' opt; do
     case "$opt" in
         d) DOWNLOAD_DIR="$OPTARG" ;;
         w) WORK_DIR="$OPTARG" ;;
@@ -143,6 +166,7 @@ while getopts ':d:w:b:f:p:DHnh' opt; do
         D) DOWNLOAD=1 ;;
         H) HEADLESS=1 ;;
         n) DRY_RUN=1 ;;
+        S) CHECK_HEADERS=0 ;;
         h) usage 0 ;;
         :) die "Option -$OPTARG requires an argument." ;;
         \?) die "Unknown option -$OPTARG (use -h for help)." ;;
@@ -253,6 +277,13 @@ process_brand() {
             return 1
         fi
         USED_SRCS="${USED_SRCS}|${src}|"
+    fi
+
+    # Validate the export's header row before renaming/uploading. Catches
+    # Medallia layout changes (renamed/added/removed survey questions).
+    if ! check_headers "$brand" "$src"; then
+        warn "$brand: header validation failed for '$src'; skipping upload (use -S to override)."
+        return 1
     fi
 
     # Determine the target filename per the required naming patterns.

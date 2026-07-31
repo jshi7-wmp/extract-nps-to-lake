@@ -8,6 +8,7 @@ Files:
 
 - `pull_nps_reports.sh` — orchestrates download → rename → upload.
 - `medallia_download.py` — Playwright browser automation for the SSO-protected export.
+- `check_headers.py` — validates each export's CSV header columns per brand.
 
 ## What it does
 
@@ -78,6 +79,7 @@ process them one at a time and point at the exact file with `-f`:
 | `-H` | Run the download browser headless (breaks first-time login) | off |
 | `-p PROFILE_DIR` | Persistent browser profile directory | `~/.medallia_playwright_profile` |
 | `-n` | Dry run (no download / rename / upload) | off |
+| `-S` | Skip CSV header/column validation before upload | off |
 
 Run `./pull_nps_reports.sh -h` for the built-in help.
 
@@ -90,3 +92,7 @@ Run `./pull_nps_reports.sh -h` for the built-in help.
   download.
 - `-f` and `-D` are mutually exclusive; `-f` cannot be combined with multiple
   `-b` brands.
+- Before each upload the CSV's header row is validated against the expected
+  columns for that brand (via `check_headers.py`). If Medallia renames, adds or
+  drops columns, the brand is reported and skipped so bad exports don't reach
+  GCS; new/extra columns are logged as a warning only. Use `-S` to bypass.
