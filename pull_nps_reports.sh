@@ -43,10 +43,11 @@
 #   -S               Skip CSV header/column validation before upload
 #
 # Downloading (-D) drives a real Chromium browser via medallia_download.py.
-# On the FIRST run a window opens and you log in through SSO (incl. MFA) once;
-# the session is saved to PROFILE_DIR and reused afterwards. If the export
-# button can't be auto-clicked, the browser stays open for you to click
-# Export -> CSV manually and the download is still captured.
+# It first runs a dedicated LOGIN step: a window opens and you complete SSO
+# (incl. MFA) once; the session is saved to PROFILE_DIR and reused for every
+# brand, so the actual downloads are hands-off. If a later export button can't
+# be auto-clicked, the browser stays open for you to click Export -> CSV
+# manually and the download is still captured.
 #
 # Typical BWM/EDRS workflow (same filename, so do one at a time):
 #   ./pull_nps_reports.sh -b BWM  -f ~/Downloads/Responses.csv
@@ -234,6 +235,23 @@ run_downloader() {
         ${hl_flag[@]+"${hl_flag[@]}"}
 }
 
+# Establish the Medallia SSO session once, up front, before any downloads.
+# Opens the browser (unless -H) and waits for an authenticated report to load;
+# once the session is saved to PROFILE_DIR the per-brand downloads run hands-off.
+medallia_login() {
+    local hl_flag=()
+    [[ "$HEADLESS" -eq 1 ]] && hl_flag=(--headless)
+    log "==== LOGIN ===="
+    log "Establishing Medallia SSO session (complete the login in the browser if prompted)..."
+    "$PY_BIN" "$DOWNLOADER" \
+        --login \
+        --brand LOGIN \
+        --url "$BWM_URL" \
+        --menu kebab \
+        --profile-dir "$PROFILE_DIR" \
+        ${hl_flag[@]+"${hl_flag[@]}"}
+}
+
 process_brand() {
     local brand="$1"
     local src target_name url menu label suggested="" staging
@@ -311,6 +329,12 @@ log "Work dir     : $WORK_DIR"
 log "GCS bucket   : $GCS_BUCKET"
 log "Brands       : $BRANDS"
 [[ "$DRY_RUN" -eq 1 ]] && log "Mode         : DRY RUN"
+
+# Log into Medallia once up front so the per-brand downloads are hands-off.
+if [[ "$DOWNLOAD" -eq 1 && "$DRY_RUN" -eq 0 ]]; then
+    medallia_login \
+        || die "Could not establish Medallia SSO session; re-run and complete the login in the browser window."
+fi
 
 processed=0
 failed=0

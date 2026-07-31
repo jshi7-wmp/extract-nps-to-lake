@@ -41,9 +41,10 @@ Uploads to: `gs://gcp-wow-wmp-ai-data-prod-data-store/data_extract/medallia/raw`
 
 ## End-to-end usage
 
-Fetch, rename, and upload all three brands. On the **first** run a Chromium
-window opens — complete the Woolworths SSO login (incl. MFA) once; the session
-is saved and reused afterwards.
+Fetch, rename, and upload all three brands. The run starts with a dedicated
+**login** step: a Chromium window opens and you complete the Woolworths SSO
+login (incl. MFA) once. The session is saved and reused, so the per-brand
+downloads that follow run hands-off (the export buttons are auto-clicked).
 
 ```sh
 ./pull_nps_reports.sh -D
